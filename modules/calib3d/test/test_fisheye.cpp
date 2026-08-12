@@ -601,6 +601,75 @@ TEST_F(fisheyeTest, Calibration)
     EXPECT_MAT_NEAR(theD, goldD, 1e-8);
 }
 
+TEST_F(fisheyeTest, CalibrationPointLayouts)
+{
+    const int n_images = 6;
+    const cv::Matx33d initialK(600, 0, 640,
+                               0, 600, 400,
+                               0, 0, 1);
+    const cv::Vec4d initialD(-0.01, 0.001, -0.0001, 0.00001);
+
+    std::vector<cv::Mat> columnObjectPoints(n_images), columnImagePoints(n_images);
+    std::vector<cv::Mat> rowObjectPoints(n_images), rowImagePoints(n_images);
+
+    for (int image_idx = 0; image_idx < n_images; ++image_idx)
+    {
+        const int n_points = 35 + 2 * image_idx;
+        cv::Mat objectPoints(n_points, 1, CV_64FC3);
+        cv::Vec3d* points = objectPoints.ptr<cv::Vec3d>();
+        for (int point_idx = 0; point_idx < n_points; ++point_idx)
+        {
+            points[point_idx] = cv::Vec3d(0.04 * (point_idx % 8),
+                                          0.04 * (point_idx / 8), 0);
+        }
+
+        const cv::Vec3d rvec(0.04 * image_idx, -0.03 * image_idx, 0.02 * image_idx);
+        const cv::Vec3d tvec(-0.14 + 0.03 * image_idx, -0.10 + 0.02 * image_idx,
+                             1.0 + 0.05 * image_idx);
+        cv::Mat imagePoints;
+        cv::fisheye::projectPoints(objectPoints, imagePoints, rvec, tvec, initialK, initialD);
+
+        columnObjectPoints[image_idx] = objectPoints;
+        columnImagePoints[image_idx] = imagePoints;
+        rowObjectPoints[image_idx] = objectPoints.t();
+        rowImagePoints[image_idx] = imagePoints.t();
+    }
+
+    int flags = 0;
+    flags |= cv::fisheye::CALIB_USE_INTRINSIC_GUESS;
+    flags |= cv::fisheye::CALIB_RECOMPUTE_EXTRINSIC;
+    flags |= cv::fisheye::CALIB_FIX_SKEW;
+
+    cv::Matx33d columnK = initialK, rowK = initialK;
+    cv::Vec4d columnD = initialD, rowD = initialD;
+    std::vector<cv::Vec3d> columnRvecs, columnTvecs, rowRvecs, rowTvecs;
+    const cv::TermCriteria criteria(3, 20, 1e-6);
+
+    const double columnRms = cv::fisheye::calibrate(
+            columnObjectPoints, columnImagePoints, imageSize, columnK, columnD,
+            columnRvecs, columnTvecs, flags, criteria);
+    const double rowRms = cv::fisheye::calibrate(
+            rowObjectPoints, rowImagePoints, imageSize, rowK, rowD,
+            rowRvecs, rowTvecs, flags, criteria);
+
+    EXPECT_TRUE(std::isfinite(columnRms));
+    EXPECT_TRUE(cv::checkRange(cv::Mat(columnK)));
+    EXPECT_TRUE(cv::checkRange(cv::Mat(columnD)));
+    EXPECT_TRUE(cv::checkRange(cv::Mat(columnRvecs)));
+    EXPECT_TRUE(cv::checkRange(cv::Mat(columnTvecs)));
+    EXPECT_TRUE(std::isfinite(rowRms));
+    EXPECT_TRUE(cv::checkRange(cv::Mat(rowK)));
+    EXPECT_TRUE(cv::checkRange(cv::Mat(rowD)));
+    EXPECT_TRUE(cv::checkRange(cv::Mat(rowRvecs)));
+    EXPECT_TRUE(cv::checkRange(cv::Mat(rowTvecs)));
+
+    EXPECT_NEAR(columnRms, rowRms, 1e-10);
+    EXPECT_MAT_NEAR(columnK, rowK, 1e-10);
+    EXPECT_MAT_NEAR(columnD, rowD, 1e-10);
+    EXPECT_MAT_NEAR(cv::Mat(columnRvecs), cv::Mat(rowRvecs), 1e-10);
+    EXPECT_MAT_NEAR(cv::Mat(columnTvecs), cv::Mat(rowTvecs), 1e-10);
+}
+
 TEST_F(fisheyeTest, CalibrationWithFixedFocalLength)
 {
     const int n_images = 34;

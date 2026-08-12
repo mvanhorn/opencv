@@ -1280,7 +1280,7 @@ void cv::internal::ComputeExtrinsicRefine(const Mat& imagePoints, const Mat& obj
         Mat jacobians;
         projectPoints(objectPoints, x, rvec, tvec, param, jacobians);
 
-        Mat ex = imagePoints - Mat(x).t();
+        Mat ex = imagePoints - Mat(x);
         ex = ex.reshape(1, 2);
 
         J = jacobians.colRange(8, 14).clone();
@@ -1487,13 +1487,12 @@ void cv::internal::CalibrateExtrinsics(InputArrayOfArrays objectPoints, InputArr
 
         objectPoints.getMat(image_idx).convertTo(object,  CV_64FC3);
         imagePoints.getMat (image_idx).convertTo(image, CV_64FC2);
+        object = object.reshape(3, (int)object.total());
+        image = image.reshape(2, (int)image.total());
 
-        bool imT = image.rows < image.cols;
-        bool obT = object.rows < object.cols;
+        InitExtrinsics(image, object, param, omckk, Tckk);
 
-        InitExtrinsics(imT ? image.t() : image, obT ? object.t() : object, param, omckk, Tckk);
-
-        ComputeExtrinsicRefine(!imT ? image.t() : image, !obT ? object.t() : object, omckk, Tckk, JJ_kk, maxIter, param, thresh_cond);
+        ComputeExtrinsicRefine(image, object, omckk, Tckk, JJ_kk, maxIter, param, thresh_cond);
         if (check_cond)
         {
             SVD svd(JJ_kk, SVD::NO_UV);
@@ -1525,14 +1524,14 @@ void cv::internal::ComputeJacobians(InputArrayOfArrays objectPoints, InputArrayO
         Mat image, object;
         objectPoints.getMat(image_idx).convertTo(object, CV_64FC3);
         imagePoints.getMat (image_idx).convertTo(image, CV_64FC2);
-
-        bool imT = image.rows < image.cols;
+        object = object.reshape(3, (int)object.total());
+        image = image.reshape(2, (int)image.total());
         Mat om(omc.getMat().col(image_idx)), T(Tc.getMat().col(image_idx));
 
         std::vector<Point2d> x;
         Mat jacobians;
         projectPoints(object, x, om, T, param, jacobians);
-        Mat exkk = (imT ? image.t() : image) - Mat(x);
+        Mat exkk = image - Mat(x);
 
         Mat A(jacobians.rows, 9, CV_64FC1);
         jacobians.colRange(0, 4).copyTo(A.colRange(0, 4));
@@ -1590,14 +1589,14 @@ void cv::internal::EstimateUncertainties(InputArrayOfArrays objectPoints, InputA
         Mat image, object;
         objectPoints.getMat(image_idx).convertTo(object, CV_64FC3);
         imagePoints.getMat (image_idx).convertTo(image, CV_64FC2);
-
-        bool imT = image.rows < image.cols;
+        object = object.reshape(3, (int)object.total());
+        image = image.reshape(2, (int)image.total());
 
         Mat om(omc.getMat().col(image_idx)), T(Tc.getMat().col(image_idx));
 
         std::vector<Point2d> x;
         projectPoints(object, x, om, T, params, noArray());
-        Mat ex_ = (imT ? image.t() : image) - Mat(x);
+        Mat ex_ = image - Mat(x);
         ex_.copyTo(ex.rowRange(insert_idx, insert_idx + ex_.rows));
         insert_idx += ex_.rows;
     }
